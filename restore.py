@@ -10,6 +10,16 @@ SaveDir = "business_data"  # 自定义存储目录
 DefaultRestoreNS = ["ipaas-function", "default", "ipaas-runtime"]
 DockerImage = ""
 
+MiddlePodReg = {
+    "nginx": "nginx-controller",
+    "mysql": "diamond-mysql",
+    "mongo": "click-mongodb",
+    "redis-gc": "redis-gcache",
+    "redis-id": "redis-idgenerator-0",
+    "zk": "zookeeper0-0",
+}
+
+
 Mysql = {
     "Host": "xxxxx",
     "Port": 3306,
@@ -21,17 +31,17 @@ Mongo = {
     "Host": "xxxx",
     "Port": "xxxx",
     "User": "xxxx",
-    "Passwd": "xxxx",
+    "Passwd": 27017,
 }
 
 RedisIdgenerator = {
     "Host": "xxxx",
-    "Port": 12345
+    "Port": 16379
 }
 
 Zookeeper = {
     "Host": "dsadada",
-    "Port": "12223"
+    "Port": 2181
 }
 
 
@@ -78,7 +88,7 @@ def restore_mysql():
 
 
 def restore_zookeeper():
-    zk_pod = get_pod_instance("zookeeper0-0")
+    zk_pod = get_pod_instance(MiddlePodReg.get("zk"))
 
     cp_cmd = 'kubectl cp ./{}/zookeeper/zk_gcache_commands.sh {}:/tmp/'.format(SaveDir, zk_pod)
     (code, ret) = getstatusoutput(cp_cmd)
@@ -99,7 +109,7 @@ def restore_zookeeper():
 
 def restore_nginx():
     # get nginx pod
-    nginx_pod = get_pod_instance("nginx-controller")
+    nginx_pod = get_pod_instance(MiddlePodReg.get("nginx"))
 
     cmd1 = "kubectl cp ./{}/nginx.tar {}:/etc/nginx/nginx.tar".format(SaveDir, nginx_pod)
     (code, ret) = getstatusoutput(cmd1)
@@ -119,7 +129,7 @@ def restore_mongo():
     check_error(code, cmd, ret)
 
 def restore_idgenerator():
-    pod = get_pod_instance("redis-idgenerator-0")
+    pod = get_pod_instance(MiddlePodReg.get("redis-id"))
 
     cmd1 = "kubectl cp ./{}/redis-idgenerator/redis_id_commands.txt {}:/tmp/redis_id_commands.txt".format(SaveDir, pod)
     (code, ret) = getstatusoutput(cmd1)
@@ -158,10 +168,25 @@ def get_special_server_address(service):
 
 def initial_environment():
     Mysql["Host"] = get_special_server_address("diamond-mysql")
+    diamond_pod = get_pod_instance("diamond0-0")
+    Mysql["User"] = get_env_from_pod("DB_USER", diamond_pod)
+    Mysql["Passwd"] = get_env_from_pod("DB_PASSWORD", diamond_pod)
+    Mysql["Port"] = get_env_from_pod("MYSQL_PORT", diamond_pod)
+
+    mongo_pod = get_pod_instance(MiddlePodReg.get("mongo"))
     Mongo["Host"] = get_special_server_address("click-mongodb")
+    Mongo["User"] = get_env_from_pod("MONGO_INITDB_ROOT_USERNAME", mongo_pod)
+    Mongo["Passwd"] = get_env_from_pod("MONGO_INITDB_ROOT_PASSWORD", mongo_pod)
+
     RedisIdgenerator["Host"] = get_special_server_address("redis-idgenerator-0")
     Zookeeper["Host"] = get_special_server_address("zookeeper0-0")
 
+# helper functions
+def get_env_from_pod(env_name, pod_name):
+    cmd = 'kubectl  exec {} --  sh  -c "echo ${}"'.format(pod_name, env_name)
+    (code,ret) = getstatusoutput(cmd)
+    check_error(code, cmd,ret)
+    return ret
 
 def Main():
     all_necessary_pod = ["diamond-mysql", "nginx-controller", "click-mongo", "redis-gcache", "redis-idgenera", "zookeeper0-0"]

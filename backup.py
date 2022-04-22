@@ -13,6 +13,16 @@ ExternalDB = False  #是否使用外置数据库
 DockerImage = ""
 # 下面这些变量在运行时候会自动获取，一般不需要修改， 如果客户用了自定义的数据库，将下面地址填写对应的
 
+
+MiddlePodReg = {
+    "nginx": "nginx-controller",
+    "mysql": "diamond-mysql",
+    "mongo": "click-mongodb",
+    "redis-gc": "redis-gcache",
+    "redis-id": "redis-idgenerator-0",
+    "zk": "zookeeper0-0",
+}
+
 Mysql = {
     "Host": "xxxxx",
     "Port": 3306,
@@ -22,19 +32,19 @@ Mysql = {
 
 Mongo = {
     "Host": "xxxx",
-    "Port": "xxxx",
+    "Port": "27017",
     "User": "xxxx",
-    "Passwd": "xxxx",
+    "Passwd": 27017,
 }
 
 RedisIdgenerator = {
     "Host": "xxxx",
-    "Port": 12345
+    "Port": 16379
 }
 
 Zookeeper = {
     "Host": "dsadada",
-    "Port": "12223"
+    "Port": 2181
 }
 
 
@@ -77,7 +87,7 @@ def backup_gcache():
 
 def backup_nginx():
     #  获取nginx容器的名称
-    cmd0 = "kubectl get pod |grep nginx-controller |awk '{print $1}'"
+    cmd0 = "kubectl get pod |grep "+ MiddlePodReg.get("nginx") + " |awk '{print $1}'"
     (code, ret) = getstatusoutput(cmd0)
     check_error(code, cmd0, ret)
     nginx_pod_name = ret
@@ -148,10 +158,34 @@ def get_special_server_address(service):
 
 def initial_environment():
     Mysql["Host"] = get_special_server_address("diamond-mysql")
+    diamond_pod = get_pod_instance("diamond0-0")
+    Mysql["User"] = get_env_from_pod("DB_USER", diamond_pod)
+    Mysql["Passwd"] = get_env_from_pod("DB_PASSWORD", diamond_pod)
+    Mysql["Port"] = get_env_from_pod("MYSQL_PORT", diamond_pod)
+
+    mongo_pod = get_pod_instance(MiddlePodReg.get("mongo"))
     Mongo["Host"] = get_special_server_address("click-mongodb")
+    Mongo["User"] = get_env_from_pod("MONGO_INITDB_ROOT_USERNAME", mongo_pod)
+    Mongo["Passwd"] = get_env_from_pod("MONGO_INITDB_ROOT_PASSWORD", mongo_pod)
+
     RedisIdgenerator["Host"] = get_special_server_address("redis-idgenerator-0")
     Zookeeper["Host"] = get_special_server_address("zookeeper0-0")
 
+
+# helper functions
+def get_env_from_pod(env_name, pod_name):
+    cmd = 'kubectl  exec {} --  sh  -c "echo ${}"'.format(pod_name, env_name)
+    (code,ret) = getstatusoutput(cmd)
+    check_error(code, cmd,ret)
+    return ret
+
+
+def get_pod_instance(pod_reg):
+    cmd = "kubectl get pods |grep " + pod_reg + " |grep Runn |awk '{print $1}'"
+    (code, pod) = getstatusoutput(cmd)
+    check_error(code, cmd, pod)
+    assert pod != "", "{} may not running, Plz check it"
+    return pod
 
 
 def Main():

@@ -9,6 +9,21 @@ import time
 VeleroLabel = "velero-minio"
 
 
+SECRET = """
+[default]
+aws_access_key_id = minio
+aws_secret_access_key = minio123
+"""
+
+def write_credentials():
+    file_name = "credentials-velero"
+    if os.path.exists(file_name):
+        return
+    with open(file_name, "w") as fp:
+        for line in SECRET.split("\n"):
+            fp.write(line+'\n')
+
+
 # hostname get current hostname
 def hostname():
     return socket.gethostname()
@@ -78,6 +93,7 @@ def get_minio_server():
 
 
 def Main():
+    write_credentials()
     # load all images
     load_image()
 
